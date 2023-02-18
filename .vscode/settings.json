@@ -1,0 +1,6 @@
+{
+    "rust-analyzer.server.extraEnv": 
+    {
+        "LIBCLANG_PATH":"/home/samb/.espressif/tools/xtensa-esp32-elf-clang/esp-15.0.0-20221201-x86_64-unknown-linux-gnu/esp-clang/lib"
+    }
+}
