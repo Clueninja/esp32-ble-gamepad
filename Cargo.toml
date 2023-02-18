@@ -17,6 +17,7 @@ anyhow = {version = "1.0.69", features = ["backtrace"]}
 esp-idf-hal = "0.40.1"
 esp-idf-svc = "0.45.0"
 esp-idf-sys = { version = "0.32.1", features = ["binstart"] }
+esp32-nimble = "0.0.7"
 
 
 [build-dependencies]
