@@ -9,22 +9,6 @@ use hal::adc::*;
 
 const GAMEPAD_ID:u8 = 0x01;
 
-// I dont think this will work
-/*
-    GAMEPAD
-        BUTTONS
-            A,B,X,Y
-            UP, DOWN, LEFT, RIGHT
-            SELECT, HOME
-            THUMB LEFT, THUMB RIGHT
-        3D GAME CONTROLLER
-            Turn Right/Left
-            Pitch Forward/Backward
-            // Roll Right/Left
-            Move Right/Left
-            Move Forward/Backward
-
-*/
 const GAMEPAD_REPORT_DESCRIPTOR:&[u8] = hid!(
     (USAGE_PAGE, 0x01),                 // Generic Desktop
     (USAGE, 0x05),                      // Gamepad
@@ -171,7 +155,6 @@ impl <'a> Gamepad<'a>
         self.report.y = self.adc.read(&mut self.axis.y)?;
         self.report.rx = self.adc.read(&mut self.axis.rx)?;
         self.report.ry = self.adc.read(&mut self.axis.ry)?;
-
         // iterate through each button and set the correct bit in self.report.buttons for it
         self.report.buttons = 0;
         for group in 0..=3{
@@ -198,18 +181,22 @@ fn main() ->Result<()>{
     let server = dev.get_server();
     let mut hid_device = BLEHIDDevice::new(server);
     let input = hid_device.input_report(GAMEPAD_ID);
-    hid_device.report_map(GAMEPAD_REPORT_DESCRIPTOR);
+
+
     hid_device.manufacturer("Clueninja");
+    hid_device.pnp(0x02, 0x05ac, 0x820a, 0x0210);
+    hid_device.report_map(GAMEPAD_REPORT_DESCRIPTOR);
+    hid_device.hid_info(0x00, 0x01);
     hid_device.set_battery_level(100);
 
-    dev.get_advertising()
-        .name("Esp Gamepad")
+
+    let adv = dev.get_advertising();
+    adv.name("Esp Gamepad")
         .appearance(0x03C4)
         .add_service_uuid(hid_device.hid_service().lock().uuid())
-        .scan_response(false)
-        .start().unwrap();
+        .scan_response(false);
+    adv.start().unwrap();
     
-
     
     let mut gamepad = Gamepad::new(
         input,
@@ -232,12 +219,16 @@ fn main() ->Result<()>{
             peripherals.pins.gpio34,
             peripherals.pins.gpio35
         )
-    )?;    
+    )?; 
+
     loop{
         if server.connected_count()>0{
-            gamepad.read()?;            
+            gamepad.read()?;
+            hal::delay::FreeRtos::delay_ms(10);
         }
-        hal::delay::FreeRtos::delay_ms(20);
+        else{
+            hal::delay::FreeRtos::delay_ms(200);
+        }
     }
     Ok(())
 }
