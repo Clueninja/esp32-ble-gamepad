@@ -1,3 +1,5 @@
+#![feature(never_type)]
+
 use std::sync::Arc;
 
 use esp_idf_sys as _; // If using the `binstart` feature of `esp-idf-sys`, always keep this module imported
@@ -59,26 +61,21 @@ const GAMEPAD_REPORT_DESCRIPTOR:&[u8] = hid!(
 
 #[repr(packed)]
 struct GamepadReport{
-    X:u8,
-    Y:u8,
-    Rx:u8,
-    Ry:u8,
+    x:u8,
+    y:u8,
+    rx:u8,
+    ry:u8,
     buttons:u16,
 }
 
 /// is this a good way of doing it? idk
 struct GamepadAxis<'a>{
-    X: AdcChannelDriver<'a,Gpio32,Atten11dB<ADC1>>,
-    Y: AdcChannelDriver<'a,Gpio33,Atten11dB<ADC1>>,
-    Rx: AdcChannelDriver<'a,Gpio34,Atten11dB<ADC1>>,
-    Ry: AdcChannelDriver<'a,Gpio35,Atten11dB<ADC1>>,
+    x: AdcChannelDriver<'a,Gpio32,Atten11dB<ADC1>>,
+    y: AdcChannelDriver<'a,Gpio33,Atten11dB<ADC1>>,
+    rx: AdcChannelDriver<'a,Gpio34,Atten11dB<ADC1>>,
+    ry: AdcChannelDriver<'a,Gpio35,Atten11dB<ADC1>>,
 }
-enum ButtonGroup{
-    RightThumb,
-    LeftThumb,
-    Trigger,
-    Home
-}
+
 struct GamepadButtons<'a>{
     // output pin groups
     right_thumb: PinDriver<'a, Gpio10, Output>,
@@ -155,25 +152,25 @@ impl <'a> Gamepad<'a>
             },
             adc:AdcDriver::new(adc, &AdcConfig::default().calibration(true)).unwrap(), 
             axis: GamepadAxis {
-                X: AdcChannelDriver::new(adc_pins.0).unwrap(), 
-                Y:AdcChannelDriver::new(adc_pins.1).unwrap(), 
-                Rx: AdcChannelDriver::new(adc_pins.2).unwrap(), 
-                Ry: AdcChannelDriver::new(adc_pins.3).unwrap() 
+                x: AdcChannelDriver::new(adc_pins.0).unwrap(), 
+                y:AdcChannelDriver::new(adc_pins.1).unwrap(), 
+                rx: AdcChannelDriver::new(adc_pins.2).unwrap(), 
+                ry: AdcChannelDriver::new(adc_pins.3).unwrap() 
             }, 
             report: GamepadReport { 
-                X: 0, 
-                Y: 0, 
-                Rx: 0, 
-                Ry: 0, 
+                x: 0, 
+                y: 0, 
+                rx: 0, 
+                ry: 0, 
                 buttons: 0 
             }
         }
     }
     pub fn read(&mut self){
-        self.report.X = self.adc.read(&mut self.axis.X).unwrap() as u8;
-        self.report.Y = self.adc.read(&mut self.axis.Y).unwrap() as u8;
-        self.report.Rx = self.adc.read(&mut self.axis.Rx).unwrap() as u8;
-        self.report.Ry = self.adc.read(&mut self.axis.Ry).unwrap() as u8;
+        self.report.x = self.adc.read(&mut self.axis.x).unwrap() as u8;
+        self.report.y = self.adc.read(&mut self.axis.y).unwrap() as u8;
+        self.report.rx = self.adc.read(&mut self.axis.rx).unwrap() as u8;
+        self.report.ry = self.adc.read(&mut self.axis.ry).unwrap() as u8;
 
         // iterate through each button and set the correct bit in self.report.buttons for it
         self.report.buttons = 0;
@@ -189,7 +186,7 @@ impl <'a> Gamepad<'a>
 }
 
 
-fn main() ->Result<()>{
+fn main() ->Result<!>{
     // It is necessary to call this function once. Otherwise some patches to the runtime
     // implemented by esp-idf-sys might not link properly. See https://github.com/esp-rs/esp-idf-template/issues/71
     esp_idf_sys::link_patches();
@@ -199,7 +196,7 @@ fn main() ->Result<()>{
     let dev = BLEDevice::take();
     dev.security().set_auth(false, true, true).set_io_cap(enums::SecurityIOCap::NoInputNoOutput);
 
-    let mut server = dev.get_server();
+    let server = dev.get_server();
     let mut hid_device = BLEHIDDevice::new(server);
     hid_device.report_map(GAMEPAD_REPORT_DESCRIPTOR);
     hid_device.manufacturer("Clueninja");
@@ -241,6 +238,4 @@ fn main() ->Result<()>{
             gamepad.read();
         }
     }
-
-    Ok(())
 }
