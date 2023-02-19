@@ -13,8 +13,9 @@ const GAMEPAD_REPORT_DESCRIPTOR:&[u8] = hid!(
     (USAGE_PAGE, 0x01),                 // Generic Desktop
     (USAGE, 0x05),                      // Gamepad
     (COLLECTION, 0x01),                 // Application
+        (REPORT_ID, GAMEPAD_ID), 
+        (USAGE, 0x97),                  // Thumbstick
         (COLLECTION, 0x00),             // Physical
-            (REPORT_ID, GAMEPAD_ID), 
             (USAGE_PAGE, 0x01),         // Generic Desktop
             (USAGE, 0x30),              // X
             (USAGE, 0x31),              // Y
@@ -35,9 +36,13 @@ const GAMEPAD_REPORT_DESCRIPTOR:&[u8] = hid!(
             (REPORT_COUNT, 0x0C),
             (HIDINPUT, 0x02),
 
-            (REPORT_SIZE, 0x04),        // 4 bits of padding
-            (REPORT_COUNT, 0x01),
-            (HIDINPUT, 0x01),
+            (USAGE_PAGE,0x01),          // Generic Desktop
+            (USAGE, 0x39),              // Hat Switch
+            (LOGICAL_MINIMUM, 0x01),
+            (LOGICAL_MAXIMUM, 0x08),
+            (REPORT_SIZE, 0x04),        // 4 bit
+            (REPORT_COUNT, 0x42),
+            (HIDINPUT, 0x02),           
         (END_COLLECTION),
     (END_COLLECTION),
 );
@@ -61,10 +66,10 @@ struct GamepadAxis<'a>{
 
 struct GamepadButtons<'a>{
     // output pin groups
-    right_thumb: PinDriver<'a, Gpio15, Output>,
-    left_thumb: PinDriver<'a, Gpio2, Output>,
-    trigger: PinDriver<'a, Gpio0, Output>,
-    home: PinDriver<'a, Gpio4, Output>,
+    group_0: PinDriver<'a, Gpio15, Output>,
+    group_1: PinDriver<'a, Gpio2, Output>,
+    group_2: PinDriver<'a, Gpio0, Output>,
+    group_3: PinDriver<'a, Gpio4, Output>,
 
     // input pin
     button_1: PinDriver<'a, Gpio16, Input>,
@@ -75,30 +80,30 @@ struct GamepadButtons<'a>{
 
 impl <'a> GamepadButtons <'a>{
     fn read_value(&mut self, group:u16, button:u16)->Result<bool>{
-        self.right_thumb.set_low()?;
-        self.left_thumb.set_low()?;
-        self.trigger.set_low()?;
-        self.home.set_low()?;
+        self.group_0.set_high()?;
+        self.group_1.set_high()?;
+        self.group_2.set_high()?;
+        self.group_3.set_high()?;
         match group{
             0=>{
-                self.right_thumb.set_high()?;
+                self.group_0.set_low()?;
             },
             1=>{
-                self.left_thumb.set_high()?;
+                self.group_1.set_low()?;
             },
             2=>{
-                self.trigger.set_high()?;
+                self.group_2.set_low()?;
             },
             3=>{
-                self.home.set_high()?;
+                self.group_3.set_low()?;
             },
             _=>unreachable!()
         }
         match button {
-            0=> Ok(self.button_1.is_high()),
-            1=> Ok(self.button_2.is_high()),
-            2=> Ok(self.button_3.is_high()),
-            3=> Ok(self.button_4.is_high()),
+            0=> Ok(self.button_1.is_low()),
+            1=> Ok(self.button_2.is_low()),
+            2=> Ok(self.button_3.is_low()),
+            3=> Ok(self.button_4.is_low()),
             _=>unreachable!()
         }
     }
@@ -124,10 +129,10 @@ impl <'a> Gamepad<'a>
         Ok(Self {
             gamepad,
             buttons: GamepadButtons { 
-                right_thumb: PinDriver::output(output_groups.0)?, 
-                left_thumb: PinDriver::output(output_groups.1)?, 
-                trigger: PinDriver::output(output_groups.2)?, 
-                home: PinDriver::output(output_groups.3)?, 
+                group_0: PinDriver::output(output_groups.0)?, 
+                group_1: PinDriver::output(output_groups.1)?, 
+                group_2: PinDriver::output(output_groups.2)?, 
+                group_3: PinDriver::output(output_groups.3)?, 
 
                 button_1: PinDriver::input(input_groups.0)?, 
                 button_2: PinDriver::input(input_groups.1)?, 
@@ -157,11 +162,46 @@ impl <'a> Gamepad<'a>
         self.report.ry = self.adc.read(&mut self.axis.ry)?;
         // iterate through each button and set the correct bit in self.report.buttons for it
         self.report.buttons = 0;
-        for group in 0..=3{
+        for group in 0..=2{
             for button in 0..=3{
                 self.report.buttons |= (self.buttons.read_value(group, button)? as u16)<<(group*4 + button);
             }
         }
+        let up = self.buttons.read_value(3, 0)?;
+        let right = self.buttons.read_value(3, 1)?;
+        let down = self.buttons.read_value(3, 2)?;
+        let left = self.buttons.read_value(3, 3)?;
+        let mut val = 0u16;
+        if up{
+            if left{
+                val = 8;
+            }
+            else if right{
+                val = 2;
+            }
+            else{
+                val = 1;
+            }
+        }
+        else if down{
+            if left{
+                val = 6;
+            }
+            else if right{
+                val = 4;
+            }
+            else{
+                val = 5;
+            }
+        }
+        else if left{
+            val = 7;
+        }
+        else if right{
+            val = 3;
+        }
+
+        self.report.buttons |= val<<12;
         self.gamepad.lock().set_from(&self.report).notify();
         Ok(())
     }
@@ -176,12 +216,12 @@ fn main() ->Result<()>{
     let peripherals = Peripherals::take().unwrap();
 
     let dev = BLEDevice::take();
-    dev.security().set_io_cap(enums::SecurityIOCap::NoInputNoOutput);
+    dev.security().set_io_cap(enums::SecurityIOCap::NoInputNoOutput)
+        .set_auth(true, true, true);
 
     let server = dev.get_server();
     let mut hid_device = BLEHIDDevice::new(server);
     let input = hid_device.input_report(GAMEPAD_ID);
-
 
     hid_device.manufacturer("Clueninja");
     hid_device.pnp(0x02, 0x05ac, 0x820a, 0x0210);
@@ -194,7 +234,7 @@ fn main() ->Result<()>{
     adv.name("Esp Gamepad")
         .appearance(0x03C4)
         .add_service_uuid(hid_device.hid_service().lock().uuid())
-        .scan_response(false);
+        .scan_response(true);
     adv.start().unwrap();
     
     
@@ -224,7 +264,7 @@ fn main() ->Result<()>{
     loop{
         if server.connected_count()>0{
             gamepad.read()?;
-            hal::delay::FreeRtos::delay_ms(10);
+            hal::delay::FreeRtos::delay_ms(40);
         }
         else{
             hal::delay::FreeRtos::delay_ms(200);
