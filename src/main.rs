@@ -93,6 +93,37 @@ struct GamepadButtons<'a>{
     button_4: PinDriver<'a, Gpio17, Input>,
 }
 
+impl <'a> GamepadButtons <'a>{
+    fn read_value(&mut self, group:u16, button:u16)->bool{
+        self.right_thumb.set_low().unwrap();
+        self.left_thumb.set_low().unwrap();
+        self.trigger.set_low().unwrap();
+        self.home.set_low().unwrap();
+        match group{
+            1=>{
+                self.right_thumb.set_high().unwrap();
+            },
+            2=>{
+                self.left_thumb.set_high().unwrap();
+            },
+            3=>{
+                self.trigger.set_high().unwrap();
+            },
+            4=>{
+                self.home.set_high().unwrap();
+            },
+            _=>unreachable!()
+        }
+        match button {
+            1=> self.button_1.is_high(),
+            2=> self.button_2.is_high(),
+            3=> self.button_3.is_high(),
+            4=> self.button_4.is_high(),
+            _=>unreachable!()
+        }
+    }
+}
+
 struct Gamepad<'a>{
     gamepad : Arc<Mutex<BLECharacteristic>>,
     pub buttons: GamepadButtons<'a>,
@@ -145,6 +176,13 @@ impl <'a> Gamepad<'a>
         self.report.Ry = self.adc.read(&mut self.axis.Ry).unwrap() as u8;
 
         // iterate through each button and set the correct bit in self.report.buttons for it
+        self.report.buttons = 0;
+        for group in 1..=4{
+            for button in 1..=4{
+                self.report.buttons |= self.buttons.read_value(group, button) as u16;
+            }
+        }
+
 
         self.gamepad.lock().set_from(&self.report).notify();
     }
