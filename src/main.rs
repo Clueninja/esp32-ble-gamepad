@@ -38,7 +38,7 @@ const GAMEPAD_REPORT_DESCRIPTOR:&[u8] = hid!(
             (USAGE, 0x33),              // Rx
             (USAGE, 0x34),              // Ry
             (LOGICAL_MINIMUM, 0x8E, 0x00),    // 142
-            (LOGICAL_MAXIMUM, 0x77, 0x07),    // 3191
+            (LOGICAL_MAXIMUM, 0x77, 0x0C),    // 3191
             (REPORT_SIZE, 0x10),        // 16 bits per axes
             (REPORT_COUNT, 0x04),       // 4 Axes
             (HIDINPUT, 0x02),           // Data, Var, Abs
@@ -61,10 +61,10 @@ const GAMEPAD_REPORT_DESCRIPTOR:&[u8] = hid!(
 
 #[repr(packed)]
 struct GamepadReport{
-    x:u8,
-    y:u8,
-    rx:u8,
-    ry:u8,
+    x:u16,
+    y:u16,
+    rx:u16,
+    ry:u16,
     buttons:u16,
 }
 
@@ -78,16 +78,16 @@ struct GamepadAxis<'a>{
 
 struct GamepadButtons<'a>{
     // output pin groups
-    right_thumb: PinDriver<'a, Gpio10, Output>,
-    left_thumb: PinDriver<'a, Gpio11, Output>,
-    trigger: PinDriver<'a, Gpio12, Output>,
-    home: PinDriver<'a, Gpio13, Output>,
+    right_thumb: PinDriver<'a, Gpio15, Output>,
+    left_thumb: PinDriver<'a, Gpio2, Output>,
+    trigger: PinDriver<'a, Gpio0, Output>,
+    home: PinDriver<'a, Gpio4, Output>,
 
     // input pin
-    button_1: PinDriver<'a, Gpio14, Input>,
-    button_2: PinDriver<'a, Gpio15, Input>,
-    button_3: PinDriver<'a, Gpio16, Input>,
-    button_4: PinDriver<'a, Gpio17, Input>,
+    button_1: PinDriver<'a, Gpio16, Input>,
+    button_2: PinDriver<'a, Gpio17, Input>,
+    button_3: PinDriver<'a, Gpio5, Input>,
+    button_4: PinDriver<'a, Gpio18, Input>,
 }
 
 impl <'a> GamepadButtons <'a>{
@@ -134,8 +134,8 @@ impl <'a> Gamepad<'a>
     pub fn new(
         gamepad:Arc<Mutex<BLECharacteristic>>, 
         adc: ADC1, 
-        output_groups: (Gpio10, Gpio11, Gpio12, Gpio13), 
-        input_groups: (Gpio14, Gpio15, Gpio16, Gpio17),
+        output_groups: (Gpio15, Gpio2, Gpio0, Gpio4), 
+        input_groups: (Gpio16, Gpio17, Gpio5, Gpio18),
         adc_pins: (Gpio32, Gpio33, Gpio34, Gpio35)
     )->Self{
         Self {
@@ -158,19 +158,19 @@ impl <'a> Gamepad<'a>
                 ry: AdcChannelDriver::new(adc_pins.3).unwrap() 
             }, 
             report: GamepadReport { 
-                x: 0, 
-                y: 0, 
-                rx: 0, 
-                ry: 0, 
+                x: 1680, 
+                y: 1680, 
+                rx: 1680, 
+                ry: 1680, 
                 buttons: 0 
             }
         }
     }
     pub fn read(&mut self){
-        self.report.x = self.adc.read(&mut self.axis.x).unwrap() as u8;
-        self.report.y = self.adc.read(&mut self.axis.y).unwrap() as u8;
-        self.report.rx = self.adc.read(&mut self.axis.rx).unwrap() as u8;
-        self.report.ry = self.adc.read(&mut self.axis.ry).unwrap() as u8;
+        self.report.x = self.adc.read(&mut self.axis.x).unwrap();
+        self.report.y = self.adc.read(&mut self.axis.y).unwrap();
+        self.report.rx = self.adc.read(&mut self.axis.rx).unwrap();
+        self.report.ry = self.adc.read(&mut self.axis.ry).unwrap();
 
         // iterate through each button and set the correct bit in self.report.buttons for it
         self.report.buttons = 0;
@@ -179,8 +179,6 @@ impl <'a> Gamepad<'a>
                 self.report.buttons |= (self.buttons.read_value(group, button) as u16)<<(group*4 + button);
             }
         }
-
-
         self.gamepad.lock().set_from(&self.report).notify();
     }
 }
@@ -212,16 +210,16 @@ fn main() ->Result<!>{
         hid_device.input_report(GAMEPAD_ID), 
         peripherals.adc1,
         (
-            peripherals.pins.gpio10,
-            peripherals.pins.gpio11,
-            peripherals.pins.gpio12,
-            peripherals.pins.gpio13
+            peripherals.pins.gpio15,
+            peripherals.pins.gpio2,
+            peripherals.pins.gpio0,
+            peripherals.pins.gpio4
         ),
         (
-            peripherals.pins.gpio14,
-            peripherals.pins.gpio15,
             peripherals.pins.gpio16,
-            peripherals.pins.gpio17
+            peripherals.pins.gpio17,
+            peripherals.pins.gpio5,
+            peripherals.pins.gpio18
         ),
         (
             peripherals.pins.gpio32,
@@ -232,7 +230,8 @@ fn main() ->Result<!>{
     );    
     loop{
         if server.connected_count()>0{
-            gamepad.read();
+            gamepad.read();            
         }
+        hal::delay::FreeRtos::delay_ms(20);
     }
 }
