@@ -67,31 +67,68 @@ struct GamepadReport{
 }
 
 /// is this a good way of doing it? idk
-struct GamepadAxis<'a, T:ADCPin, A:Adc>{
-    X: AdcChannelDriver<'a,T,Atten11dB<A>>,
-    Y: AdcChannelDriver<'a,T,Atten11dB<A>>,
-    Rx: AdcChannelDriver<'a,T,Atten11dB<A>>,
-    Ry: AdcChannelDriver<'a,T,Atten11dB<A>>,
+struct GamepadAxis<'a>{
+    X: AdcChannelDriver<'a,Gpio32,Atten11dB<ADC1>>,
+    Y: AdcChannelDriver<'a,Gpio33,Atten11dB<ADC1>>,
+    Rx: AdcChannelDriver<'a,Gpio34,Atten11dB<ADC1>>,
+    Ry: AdcChannelDriver<'a,Gpio35,Atten11dB<ADC1>>,
+}
+enum ButtonGroup{
+    RightThumb,
+    LeftThumb,
+    Trigger,
+    Home
+}
+struct GamepadButtons<'a>{
+    // output pin groups
+    right_thumb: PinDriver<'a, Gpio10, Output>,
+    left_thumb: PinDriver<'a, Gpio11, Output>,
+    trigger: PinDriver<'a, Gpio12, Output>,
+    home: PinDriver<'a, Gpio13, Output>,
+
+    // input pin
+    button_1: PinDriver<'a, Gpio14, Input>,
+    button_2: PinDriver<'a, Gpio15, Input>,
+    button_3: PinDriver<'a, Gpio16, Input>,
+    button_4: PinDriver<'a, Gpio17, Input>,
 }
 
-struct Gamepad<'a, P: Pin, T:ADCPin>{
+struct Gamepad<'a>{
     gamepad : Arc<Mutex<BLECharacteristic>>,
-    pub buttons: Vec<PinDriver<'a, P, Input>>,
+    pub buttons: GamepadButtons<'a>,
     adc: AdcDriver<'a, ADC1>,
-    //axis: GamepadAxis<'a, T, ADC1>,
-    pub axis: Vec<AdcChannelDriver<'a, T, Atten11dB<ADC1>>>,
+    pub axis: GamepadAxis<'a>,
     report:GamepadReport,
 }
 
-impl <'a, P:InputPin, T:ADCPin> Gamepad<'a, P, T> 
-    where Atten11dB<ADC1>:Attenuation<<T as ADCPin>::Adc>
+impl <'a> Gamepad<'a> 
     {
-    pub fn new(gamepad:Arc<Mutex<BLECharacteristic>>, adc: ADC1)->Self{
+    pub fn new(
+        gamepad:Arc<Mutex<BLECharacteristic>>, 
+        adc: ADC1, 
+        output_groups: (Gpio10, Gpio11, Gpio12, Gpio13), 
+        input_groups: (Gpio14, Gpio15, Gpio16, Gpio17),
+        adc_pins: (Gpio32, Gpio33, Gpio34, Gpio35)
+    )->Self{
         Self {
             gamepad,
-            buttons: Vec::new(), 
+            buttons: GamepadButtons { 
+                right_thumb: PinDriver::output(output_groups.0).unwrap(), 
+                left_thumb: PinDriver::output(output_groups.1).unwrap(), 
+                trigger: PinDriver::output(output_groups.2).unwrap(), 
+                home: PinDriver::output(output_groups.3).unwrap(), 
+                button_1: PinDriver::input(input_groups.0).unwrap(), 
+                button_2: PinDriver::input(input_groups.1).unwrap(), 
+                button_3: PinDriver::input(input_groups.2).unwrap(), 
+                button_4: PinDriver::input(input_groups.3).unwrap() 
+            },
             adc:AdcDriver::new(adc, &AdcConfig::default().calibration(true)).unwrap(), 
-            axis: Vec::new(), 
+            axis: GamepadAxis {
+                X: AdcChannelDriver::new(adc_pins.0).unwrap(), 
+                Y:AdcChannelDriver::new(adc_pins.1).unwrap(), 
+                Rx: AdcChannelDriver::new(adc_pins.2).unwrap(), 
+                Ry: AdcChannelDriver::new(adc_pins.3).unwrap() 
+            }, 
             report: GamepadReport { 
                 X: 0, 
                 Y: 0, 
@@ -102,22 +139,13 @@ impl <'a, P:InputPin, T:ADCPin> Gamepad<'a, P, T>
         }
     }
     pub fn read(&mut self){
-        if let Some(a) = self.axis.get_mut(0){
-            self.report.X = self.adc.read(a).unwrap() as u8;
-        }
-        if let Some(a) = self.axis.get_mut(1){
-            self.report.Y = self.adc.read(a).unwrap() as u8;
-        }
-        if let Some(a) = self.axis.get_mut(2){
-            self.report.Rx = self.adc.read(a).unwrap() as u8;
-        }
-        if let Some(a) = self.axis.get_mut(3){
-            self.report.Ry = self.adc.read(a).unwrap() as u8;
-        }
-        self.report.buttons = 0;
-        for (count, b) in self.buttons.iter_mut().enumerate(){
-            self.report.buttons |= (b.is_high()as u16) << count;
-        }
+        self.report.X = self.adc.read(&mut self.axis.X).unwrap() as u8;
+        self.report.Y = self.adc.read(&mut self.axis.Y).unwrap() as u8;
+        self.report.Rx = self.adc.read(&mut self.axis.Rx).unwrap() as u8;
+        self.report.Ry = self.adc.read(&mut self.axis.Ry).unwrap() as u8;
+
+        // iterate through each button and set the correct bit in self.report.buttons for it
+
         self.gamepad.lock().set_from(&self.report).notify();
     }
 }
@@ -146,14 +174,33 @@ fn main() ->Result<()>{
     
 
     let peripherals = Peripherals::take().unwrap();
-    let mut gamepad = Gamepad::new(hid_device.input_report(GAMEPAD_ID), peripherals.adc1);
+    let mut gamepad = Gamepad::new(
+        hid_device.input_report(GAMEPAD_ID), 
+        peripherals.adc1,
+        (
+            peripherals.pins.gpio10,
+            peripherals.pins.gpio11,
+            peripherals.pins.gpio12,
+            peripherals.pins.gpio13
+        ),
+        (
+            peripherals.pins.gpio14,
+            peripherals.pins.gpio15,
+            peripherals.pins.gpio16,
+            peripherals.pins.gpio17
+        ),
+        (
+            peripherals.pins.gpio32,
+            peripherals.pins.gpio33,
+            peripherals.pins.gpio34,
+            peripherals.pins.gpio35
+        )
+    );
     // hard code gpio pins to use, also pin matrix won't work in this configuration
-    gamepad.buttons.push(PinDriver::input(peripherals.pins.gpio0)?);
-    gamepad.buttons.push(PinDriver::input(peripherals.pins.gpio1)?);
-
+    
     loop{
         if server.connected_count()>0{
-            
+            gamepad.read();
         }
     }
 
