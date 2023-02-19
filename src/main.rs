@@ -1,4 +1,3 @@
-#![feature(never_type)]
 
 use std::sync::Arc;
 
@@ -91,31 +90,31 @@ struct GamepadButtons<'a>{
 }
 
 impl <'a> GamepadButtons <'a>{
-    fn read_value(&mut self, group:u16, button:u16)->bool{
-        self.right_thumb.set_low().unwrap();
-        self.left_thumb.set_low().unwrap();
-        self.trigger.set_low().unwrap();
-        self.home.set_low().unwrap();
+    fn read_value(&mut self, group:u16, button:u16)->Result<bool>{
+        self.right_thumb.set_low()?;
+        self.left_thumb.set_low()?;
+        self.trigger.set_low()?;
+        self.home.set_low()?;
         match group{
             0=>{
-                self.right_thumb.set_high().unwrap();
+                self.right_thumb.set_high()?;
             },
             1=>{
-                self.left_thumb.set_high().unwrap();
+                self.left_thumb.set_high()?;
             },
             2=>{
-                self.trigger.set_high().unwrap();
+                self.trigger.set_high()?;
             },
             3=>{
-                self.home.set_high().unwrap();
+                self.home.set_high()?;
             },
             _=>unreachable!()
         }
         match button {
-            0=> self.button_1.is_high(),
-            1=> self.button_2.is_high(),
-            2=> self.button_3.is_high(),
-            3=> self.button_4.is_high(),
+            0=> Ok(self.button_1.is_high()),
+            1=> Ok(self.button_2.is_high()),
+            2=> Ok(self.button_3.is_high()),
+            3=> Ok(self.button_4.is_high()),
             _=>unreachable!()
         }
     }
@@ -137,25 +136,26 @@ impl <'a> Gamepad<'a>
         output_groups: (Gpio15, Gpio2, Gpio0, Gpio4), 
         input_groups: (Gpio16, Gpio17, Gpio5, Gpio18),
         adc_pins: (Gpio32, Gpio33, Gpio34, Gpio35)
-    )->Self{
-        Self {
+    )->Result<Self>{
+        Ok(Self {
             gamepad,
             buttons: GamepadButtons { 
-                right_thumb: PinDriver::output(output_groups.0).unwrap(), 
-                left_thumb: PinDriver::output(output_groups.1).unwrap(), 
-                trigger: PinDriver::output(output_groups.2).unwrap(), 
-                home: PinDriver::output(output_groups.3).unwrap(), 
-                button_1: PinDriver::input(input_groups.0).unwrap(), 
-                button_2: PinDriver::input(input_groups.1).unwrap(), 
-                button_3: PinDriver::input(input_groups.2).unwrap(), 
-                button_4: PinDriver::input(input_groups.3).unwrap() 
+                right_thumb: PinDriver::output(output_groups.0)?, 
+                left_thumb: PinDriver::output(output_groups.1)?, 
+                trigger: PinDriver::output(output_groups.2)?, 
+                home: PinDriver::output(output_groups.3)?, 
+
+                button_1: PinDriver::input(input_groups.0)?, 
+                button_2: PinDriver::input(input_groups.1)?, 
+                button_3: PinDriver::input(input_groups.2)?, 
+                button_4: PinDriver::input(input_groups.3)? 
             },
-            adc:AdcDriver::new(adc, &AdcConfig::default().calibration(true)).unwrap(), 
+            adc:AdcDriver::new(adc, &AdcConfig::default().calibration(true))?, 
             axis: GamepadAxis {
-                x: AdcChannelDriver::new(adc_pins.0).unwrap(), 
-                y:AdcChannelDriver::new(adc_pins.1).unwrap(), 
-                rx: AdcChannelDriver::new(adc_pins.2).unwrap(), 
-                ry: AdcChannelDriver::new(adc_pins.3).unwrap() 
+                x: AdcChannelDriver::new(adc_pins.0)?, 
+                y:AdcChannelDriver::new(adc_pins.1)?, 
+                rx: AdcChannelDriver::new(adc_pins.2)?, 
+                ry: AdcChannelDriver::new(adc_pins.3)? 
             }, 
             report: GamepadReport { 
                 x: 1680, 
@@ -164,37 +164,40 @@ impl <'a> Gamepad<'a>
                 ry: 1680, 
                 buttons: 0 
             }
-        }
+        })
     }
-    pub fn read(&mut self){
-        self.report.x = self.adc.read(&mut self.axis.x).unwrap();
-        self.report.y = self.adc.read(&mut self.axis.y).unwrap();
-        self.report.rx = self.adc.read(&mut self.axis.rx).unwrap();
-        self.report.ry = self.adc.read(&mut self.axis.ry).unwrap();
+    pub fn read(&mut self)->Result<()>{
+        self.report.x = self.adc.read(&mut self.axis.x)?;
+        self.report.y = self.adc.read(&mut self.axis.y)?;
+        self.report.rx = self.adc.read(&mut self.axis.rx)?;
+        self.report.ry = self.adc.read(&mut self.axis.ry)?;
 
         // iterate through each button and set the correct bit in self.report.buttons for it
         self.report.buttons = 0;
         for group in 0..=3{
             for button in 0..=3{
-                self.report.buttons |= (self.buttons.read_value(group, button) as u16)<<(group*4 + button);
+                self.report.buttons |= (self.buttons.read_value(group, button)? as u16)<<(group*4 + button);
             }
         }
         self.gamepad.lock().set_from(&self.report).notify();
+        Ok(())
     }
 }
 
 
-fn main() ->Result<!>{
+fn main() ->Result<()>{
     // It is necessary to call this function once. Otherwise some patches to the runtime
     // implemented by esp-idf-sys might not link properly. See https://github.com/esp-rs/esp-idf-template/issues/71
     esp_idf_sys::link_patches();
 
+    let peripherals = Peripherals::take().unwrap();
 
     let dev = BLEDevice::take();
-    dev.security().set_auth(false, true, true).set_io_cap(enums::SecurityIOCap::NoInputNoOutput);
+    dev.security().set_io_cap(enums::SecurityIOCap::NoInputNoOutput);
 
     let server = dev.get_server();
     let mut hid_device = BLEHIDDevice::new(server);
+    let input = hid_device.input_report(GAMEPAD_ID);
     hid_device.report_map(GAMEPAD_REPORT_DESCRIPTOR);
     hid_device.manufacturer("Clueninja");
     hid_device.set_battery_level(100);
@@ -202,12 +205,14 @@ fn main() ->Result<!>{
     dev.get_advertising()
         .name("Esp Gamepad")
         .appearance(0x03C4)
-        .add_service_uuid(hid_device.hid_service().lock().uuid());
+        .add_service_uuid(hid_device.hid_service().lock().uuid())
+        .scan_response(false)
+        .start().unwrap();
     
 
-    let peripherals = Peripherals::take().unwrap();
+    
     let mut gamepad = Gamepad::new(
-        hid_device.input_report(GAMEPAD_ID), 
+        input,
         peripherals.adc1,
         (
             peripherals.pins.gpio15,
@@ -227,11 +232,12 @@ fn main() ->Result<!>{
             peripherals.pins.gpio34,
             peripherals.pins.gpio35
         )
-    );    
+    )?;    
     loop{
         if server.connected_count()>0{
-            gamepad.read();            
+            gamepad.read()?;            
         }
         hal::delay::FreeRtos::delay_ms(20);
     }
+    Ok(())
 }
