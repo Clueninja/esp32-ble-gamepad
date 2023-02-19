@@ -37,9 +37,9 @@ const GAMEPAD_REPORT_DESCRIPTOR:&[u8] = hid!(
             (USAGE, 0x31),              // Y
             (USAGE, 0x33),              // Rx
             (USAGE, 0x34),              // Ry
-            (LOGICAL_MINIMUM, 0x00),    // 0
-            (LOGICAL_MAXIMUM, 0xFF),    // 255
-            (REPORT_SIZE, 0x08),        // 8 bits per axes
+            (LOGICAL_MINIMUM, 0x8E, 0x00),    // 142
+            (LOGICAL_MAXIMUM, 0x77, 0x07),    // 3191
+            (REPORT_SIZE, 0x10),        // 16 bits per axes
             (REPORT_COUNT, 0x04),       // 4 Axes
             (HIDINPUT, 0x02),           // Data, Var, Abs
 
@@ -97,25 +97,25 @@ impl <'a> GamepadButtons <'a>{
         self.trigger.set_low().unwrap();
         self.home.set_low().unwrap();
         match group{
-            1=>{
+            0=>{
                 self.right_thumb.set_high().unwrap();
             },
-            2=>{
+            1=>{
                 self.left_thumb.set_high().unwrap();
             },
-            3=>{
+            2=>{
                 self.trigger.set_high().unwrap();
             },
-            4=>{
+            3=>{
                 self.home.set_high().unwrap();
             },
             _=>unreachable!()
         }
         match button {
-            1=> self.button_1.is_high(),
-            2=> self.button_2.is_high(),
-            3=> self.button_3.is_high(),
-            4=> self.button_4.is_high(),
+            0=> self.button_1.is_high(),
+            1=> self.button_2.is_high(),
+            2=> self.button_3.is_high(),
+            3=> self.button_4.is_high(),
             _=>unreachable!()
         }
     }
@@ -174,9 +174,9 @@ impl <'a> Gamepad<'a>
 
         // iterate through each button and set the correct bit in self.report.buttons for it
         self.report.buttons = 0;
-        for group in 1..=4{
-            for button in 1..=4{
-                self.report.buttons |= self.buttons.read_value(group, button) as u16;
+        for group in 0..=3{
+            for button in 0..=3{
+                self.report.buttons |= (self.buttons.read_value(group, button) as u16)<<(group*4 + button);
             }
         }
 
@@ -190,7 +190,6 @@ fn main() ->Result<!>{
     // It is necessary to call this function once. Otherwise some patches to the runtime
     // implemented by esp-idf-sys might not link properly. See https://github.com/esp-rs/esp-idf-template/issues/71
     esp_idf_sys::link_patches();
-
 
 
     let dev = BLEDevice::take();
@@ -230,9 +229,7 @@ fn main() ->Result<!>{
             peripherals.pins.gpio34,
             peripherals.pins.gpio35
         )
-    );
-    // hard code gpio pins to use, also pin matrix won't work in this configuration
-    
+    );    
     loop{
         if server.connected_count()>0{
             gamepad.read();
