@@ -216,9 +216,8 @@ fn main() ->Result<()>{
     let peripherals = Peripherals::take().unwrap();
 
     let dev = BLEDevice::take();
-    dev.security().set_io_cap(enums::SecurityIOCap::NoInputNoOutput)
-        .set_passkey(1023)
-        .set_auth(true, true, true);
+    dev.security().set_io_cap(enums::SecurityIOCap::NoInputNoOutput);
+        //.set_auth(true, true, true);
 
     let server = dev.get_server();
     let mut hid_device = BLEHIDDevice::new(server);
@@ -265,7 +264,7 @@ fn main() ->Result<()>{
     loop{
         if server.connected_count()>0{
             gamepad.read()?;
-            hal::delay::FreeRtos::delay_ms(40);
+            hal::delay::FreeRtos::delay_ms(1);
         }
         else{
             hal::delay::FreeRtos::delay_ms(200);
