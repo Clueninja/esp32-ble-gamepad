@@ -217,6 +217,7 @@ fn main() ->Result<()>{
 
     let dev = BLEDevice::take();
     dev.security().set_io_cap(enums::SecurityIOCap::NoInputNoOutput)
+        .set_passkey(1023)
         .set_auth(true, true, true);
 
     let server = dev.get_server();
