@@ -80,30 +80,30 @@ struct GamepadButtons<'a>{
 
 impl <'a> GamepadButtons <'a>{
     fn read_value(&mut self, group:u16, button:u16)->Result<bool>{
-        self.group_0.set_high()?;
-        self.group_1.set_high()?;
-        self.group_2.set_high()?;
-        self.group_3.set_high()?;
+        self.group_0.set_low()?;
+        self.group_1.set_low()?;
+        self.group_2.set_low()?;
+        self.group_3.set_low()?;
         match group{
             0=>{
-                self.group_0.set_low()?;
+                self.group_0.set_high()?;
             },
             1=>{
-                self.group_1.set_low()?;
+                self.group_1.set_high()?;
             },
             2=>{
-                self.group_2.set_low()?;
+                self.group_2.set_high()?;
             },
             3=>{
-                self.group_3.set_low()?;
+                self.group_3.set_high()?;
             },
             _=>unreachable!()
         }
         match button {
-            0=> Ok(self.button_1.is_low()),
-            1=> Ok(self.button_2.is_low()),
-            2=> Ok(self.button_3.is_low()),
-            3=> Ok(self.button_4.is_low()),
+            0=> Ok(self.button_1.is_high()),
+            1=> Ok(self.button_2.is_high()),
+            2=> Ok(self.button_3.is_high()),
+            3=> Ok(self.button_4.is_high()),
             _=>unreachable!()
         }
     }
@@ -125,20 +125,26 @@ impl <'a> Gamepad<'a>
         output_groups: (Gpio15, Gpio2, Gpio0, Gpio4), 
         input_groups: (Gpio16, Gpio17, Gpio5, Gpio18),
         adc_pins: (Gpio32, Gpio33, Gpio34, Gpio35)
-    )->Result<Self>{
+    )->Result<Self>
+    {
+        let mut buttons = GamepadButtons { 
+            group_0: PinDriver::output(output_groups.0)?, 
+            group_1: PinDriver::output(output_groups.1)?, 
+            group_2: PinDriver::output(output_groups.2)?, 
+            group_3: PinDriver::output(output_groups.3)?, 
+
+            button_1: PinDriver::input(input_groups.0)?, 
+            button_2: PinDriver::input(input_groups.1)?, 
+            button_3: PinDriver::input(input_groups.2)?, 
+            button_4: PinDriver::input(input_groups.3)? 
+        };
+        buttons.button_1.set_pull(Pull::Down)?;
+        buttons.button_2.set_pull(Pull::Down)?;
+        buttons.button_3.set_pull(Pull::Down)?;
+        buttons.button_4.set_pull(Pull::Down)?;
         Ok(Self {
             gamepad,
-            buttons: GamepadButtons { 
-                group_0: PinDriver::output(output_groups.0)?, 
-                group_1: PinDriver::output(output_groups.1)?, 
-                group_2: PinDriver::output(output_groups.2)?, 
-                group_3: PinDriver::output(output_groups.3)?, 
-
-                button_1: PinDriver::input(input_groups.0)?, 
-                button_2: PinDriver::input(input_groups.1)?, 
-                button_3: PinDriver::input(input_groups.2)?, 
-                button_4: PinDriver::input(input_groups.3)? 
-            },
+            buttons,
             adc:AdcDriver::new(adc, &AdcConfig::default().calibration(true))?, 
             axis: GamepadAxis {
                 x: AdcChannelDriver::new(adc_pins.0)?, 
@@ -216,8 +222,8 @@ fn main() ->Result<()>{
     let peripherals = Peripherals::take().unwrap();
 
     let dev = BLEDevice::take();
-    dev.security().set_io_cap(enums::SecurityIOCap::NoInputNoOutput);
-        //.set_auth(true, true, true);
+    dev.security().set_io_cap(enums::SecurityIOCap::NoInputNoOutput)
+        .set_auth(true, true, true);
 
     let server = dev.get_server();
     let mut hid_device = BLEHIDDevice::new(server);
