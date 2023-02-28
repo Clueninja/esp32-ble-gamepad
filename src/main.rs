@@ -276,5 +276,4 @@ fn main() ->Result<()>{
             hal::delay::FreeRtos::delay_ms(200);
         }
     }
-    Ok(())
 }
