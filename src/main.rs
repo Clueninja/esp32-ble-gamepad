@@ -66,44 +66,31 @@ struct GamepadAxis<'a>{
 
 struct GamepadButtons<'a>{
     // output pin groups
-    group_0: PinDriver<'a, Gpio15, Output>,
-    group_1: PinDriver<'a, Gpio2, Output>,
-    group_2: PinDriver<'a, Gpio0, Output>,
-    group_3: PinDriver<'a, Gpio4, Output>,
+    select_0: PinDriver<'a, Gpio15, Output>,
+    select_1: PinDriver<'a, Gpio2, Output>,
 
     // input pin
-    button_1: PinDriver<'a, Gpio16, Input>,
-    button_2: PinDriver<'a, Gpio17, Input>,
-    button_3: PinDriver<'a, Gpio5, Input>,
-    button_4: PinDriver<'a, Gpio18, Input>,
+    group_0: PinDriver<'a, Gpio16, Input>,
+    group_1: PinDriver<'a, Gpio17, Input>,
+    group_2: PinDriver<'a, Gpio5, Input>,
+    group_3: PinDriver<'a, Gpio18, Input>,
 }
 
 impl <'a> GamepadButtons <'a>{
     fn read_value(&mut self, group:u16, button:u16)->Result<bool>{
-        self.group_0.set_low()?;
-        self.group_1.set_low()?;
-        self.group_2.set_low()?;
-        self.group_3.set_low()?;
-        match group{
-            0=>{
-                self.group_0.set_high()?;
-            },
-            1=>{
-                self.group_1.set_high()?;
-            },
-            2=>{
-                self.group_2.set_high()?;
-            },
-            3=>{
-                self.group_3.set_high()?;
-            },
+        match button{
+            0=>{self.select_1.set_low()?;self.select_0.set_low()?; },
+            1=>{self.select_1.set_low()?;self.select_0.set_high()?; },
+            2=>{self.select_1.set_high()?;self.select_0.set_low()?; },
+            3=>{self.select_1.set_high()?;self.select_0.set_high()?; },
             _=>unreachable!()
         }
-        match button {
-            0=> Ok(self.button_1.is_high()),
-            1=> Ok(self.button_2.is_high()),
-            2=> Ok(self.button_3.is_high()),
-            3=> Ok(self.button_4.is_high()),
+        // might need a delay here for the demultiplexer
+        match group{
+            0=>Ok(self.group_0.is_low()),
+            1=>Ok(self.group_1.is_low()),
+            2=>Ok(self.group_2.is_low()),
+            3=>Ok(self.group_2.is_low()),
             _=>unreachable!()
         }
     }
@@ -122,26 +109,24 @@ impl <'a> Gamepad<'a>
     pub fn new(
         gamepad:Arc<Mutex<BLECharacteristic>>, 
         adc: ADC1, 
-        output_groups: (Gpio15, Gpio2, Gpio0, Gpio4), 
+        select_pins: (Gpio15, Gpio2), 
         input_groups: (Gpio16, Gpio17, Gpio5, Gpio18),
         adc_pins: (Gpio32, Gpio33, Gpio34, Gpio35)
     )->Result<Self>
     {
         let mut buttons = GamepadButtons { 
-            group_0: PinDriver::output(output_groups.0)?, 
-            group_1: PinDriver::output(output_groups.1)?, 
-            group_2: PinDriver::output(output_groups.2)?, 
-            group_3: PinDriver::output(output_groups.3)?, 
+            select_0: PinDriver::output(select_pins.0)?, 
+            select_1: PinDriver::output(select_pins.1)?, 
 
-            button_1: PinDriver::input(input_groups.0)?, 
-            button_2: PinDriver::input(input_groups.1)?, 
-            button_3: PinDriver::input(input_groups.2)?, 
-            button_4: PinDriver::input(input_groups.3)? 
+            group_0: PinDriver::input(input_groups.0)?, 
+            group_1: PinDriver::input(input_groups.1)?, 
+            group_2: PinDriver::input(input_groups.2)?, 
+            group_3: PinDriver::input(input_groups.3)? 
         };
-        buttons.button_1.set_pull(Pull::Down)?;
-        buttons.button_2.set_pull(Pull::Down)?;
-        buttons.button_3.set_pull(Pull::Down)?;
-        buttons.button_4.set_pull(Pull::Down)?;
+        buttons.group_0.set_pull(Pull::Up)?;
+        buttons.group_1.set_pull(Pull::Up)?;
+        buttons.group_2.set_pull(Pull::Up)?;
+        buttons.group_3.set_pull(Pull::Up)?;
         Ok(Self {
             gamepad,
             buttons,
@@ -250,8 +235,6 @@ fn main() ->Result<()>{
         (
             peripherals.pins.gpio15,
             peripherals.pins.gpio2,
-            peripherals.pins.gpio0,
-            peripherals.pins.gpio4
         ),
         (
             peripherals.pins.gpio16,

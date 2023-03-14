@@ -3,8 +3,7 @@
 	"tasks": [
 		{
 			"env": {
-				//"PATH":"/home/samb/.espressif/tools/xtensa-esp32s3-elf/esp-2021r2-patch5-8_4_0/xtensa-esp32-elf/bin:$PATH",
-				"LIBCLANG_PATH":"/home/samb/.espressif/tools/xtensa-esp32-elf-clang/esp-15.0.0-20221201-x86_64-unknown-linux-gnu/esp-clang/lib",
+				"LIBCLANG_PATH": "/home/samb/.espressif/tools/xtensa-esp32-elf-clang/esp-15.0.0-20221201-x86_64-unknown-linux-gnu/esp-clang/lib"
 			},
 			"type": "cargo",
 			"command": "run",
@@ -12,10 +11,19 @@
 				"$rustc"
 			],
 			"label": "rust: cargo run",
+			"group": "build"
+		},
+		{
+			"type": "cargo",
+			"command": "build",
+			"problemMatcher": [
+				"$rustc"
+			],
 			"group": {
 				"kind": "build",
 				"isDefault": true
-			}
+			},
+			"label": "rust: cargo build"
 		}
 	]
 }
