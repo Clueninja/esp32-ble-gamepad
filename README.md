@@ -50,5 +50,5 @@ Anyways, I rediscovered the project and decided to just finish it, I ordered the
 ## Finishing up
 So thats the state of the project so far, I havent yet made a plastic shell for it, or designed a display for it, though I do have some commented code to see how it would work.
 
-![finished](docs/finished%204.jpeg)
+![finished](docs/finished%204.jpg)
 This is my first solo project with this level of design process, I wouldn't have been able to do it without some of my friends who were fantastic rubber ducks while I tried nruthlessly to explain to them how the device connects through bluetooth to the computer in such a way the computer knows its a gamepad, specifically why it isn't working in this particular moment.
