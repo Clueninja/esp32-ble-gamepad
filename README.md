@@ -27,7 +27,7 @@ Around the same time I was looking for some joystick modules, I found loose ones
 
 The esp32's can only detect voltage so high accurately and the joystick module asked for 5V input, so I realised if I used a potential divider then I could get the perfect range of voltages for the esp32 allowing for the greatest accuracy.
 
-Later I found some cheap presoldered joystick modules which I removed the male pin headers to and connected wires instead, looking to the future where these moduels would be mounted to a plastic case and wires would run down to the mainboard.
+Later I found some cheap presoldered joystick modules which I removed the male pin headers to and connected wires instead, looking to the future where these modules would be mounted to a plastic case and wires would run down to the mainboard.
 
 ## Moving to a prototype board
 
