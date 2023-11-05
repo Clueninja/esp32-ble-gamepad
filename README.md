@@ -21,6 +21,7 @@ In order to alieviate this problem I realised I could use 2 demultiplexers to co
 
 After going through many datasheets from electronic stores I found the perfect demultiplexer for my needs, a 4 channel 4052 IC. While I was testing the IC, I realised it wasnt working properly, the output would flicker and give the incorrect value. After much debugging, I read through the datasheet and found that it takes 200ns to switch, apparently my esp32 was so fast the IC couldnt keep up, after adding an appropriate delay after each button read the program was working perfectly and I could press multiple buttons at the same time and they would all detect properly.
 
+
 ## Joysticks
 
 Around the same time I was looking for some joystick modules, I found loose ones designed to replace worn ones in xbox controllers, but they were difficult to solder and design around... but they were good enough that I could stick them into a breadboard to check that the program worked.
@@ -48,4 +49,6 @@ Anyways, I rediscovered the project and decided to just finish it, I ordered the
 
 ## Finishing up
 So thats the state of the project so far, I havent yet made a plastic shell for it, or designed a display for it, though I do have some commented code to see how it would work.
+
+![finished](docs/finished%204.jpeg)
 This is my first solo project with this level of design process, I wouldn't have been able to do it without some of my friends who were fantastic rubber ducks while I tried nruthlessly to explain to them how the device connects through bluetooth to the computer in such a way the computer knows its a gamepad, specifically why it isn't working in this particular moment.
