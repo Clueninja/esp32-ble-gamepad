@@ -6,6 +6,7 @@ use esp_idf_hal::{self as hal, prelude::*, gpio::*};
 use esp32_nimble::{*, hid::*, utilities::mutex::*};
 use anyhow::Result;
 use hal::adc::*;
+use tm1637::*;
 
 const GAMEPAD_ID:u8 = 0x01;
 
@@ -21,8 +22,8 @@ const GAMEPAD_REPORT_DESCRIPTOR:&[u8] = hid!(
             (USAGE, 0x31),              // Y
             (USAGE, 0x33),              // Rx
             (USAGE, 0x34),              // Ry
-            (LOGICAL_MINIMUM, 0x8E, 0x00),    // 142
-            (LOGICAL_MAXIMUM, 0x77, 0x0C),    // 3191
+            (LOGICAL_MINIMUM, 0x00, 0x00),    // 0
+            (LOGICAL_MAXIMUM, 0x92, 0x09),    // 2450
             (REPORT_SIZE, 0x10),        // 16 bits per axes
             (REPORT_COUNT, 0x04),       // 4 Axes
             (HIDINPUT, 0x02),           // Data, Var, Abs
@@ -58,10 +59,10 @@ struct GamepadReport{
 
 /// is this a good way of doing it? idk
 struct GamepadAxis<'a>{
-    x: AdcChannelDriver<'a,Gpio32,Atten11dB<ADC1>>,
-    y: AdcChannelDriver<'a,Gpio33,Atten11dB<ADC1>>,
-    rx: AdcChannelDriver<'a,Gpio34,Atten11dB<ADC1>>,
-    ry: AdcChannelDriver<'a,Gpio35,Atten11dB<ADC1>>,
+    x: AdcChannelDriver<'a,Gpio39,Atten11dB<ADC1>>,
+    y: AdcChannelDriver<'a,Gpio36,Atten11dB<ADC1>>,
+    rx: AdcChannelDriver<'a,Gpio35,Atten11dB<ADC1>>,
+    ry: AdcChannelDriver<'a,Gpio34,Atten11dB<ADC1>>,
 }
 
 struct GamepadButtons<'a>{
@@ -70,27 +71,28 @@ struct GamepadButtons<'a>{
     select_1: PinDriver<'a, Gpio2, Output>,
 
     // input pin
-    group_0: PinDriver<'a, Gpio16, Input>,
-    group_1: PinDriver<'a, Gpio17, Input>,
-    group_2: PinDriver<'a, Gpio5, Input>,
-    group_3: PinDriver<'a, Gpio18, Input>,
+    group_0: PinDriver<'a, Gpio17, Input>,
+    group_1: PinDriver<'a, Gpio16, Input>,
+    group_2: PinDriver<'a, Gpio4, Input>,
+    group_3: PinDriver<'a, Gpio12, Input>,
 }
 
 impl <'a> GamepadButtons <'a>{
     fn read_value(&mut self, group:u16, button:u16)->Result<bool>{
         match button{
-            0=>{self.select_1.set_low()?;self.select_0.set_low()?; },
-            1=>{self.select_1.set_low()?;self.select_0.set_high()?; },
-            2=>{self.select_1.set_high()?;self.select_0.set_low()?; },
-            3=>{self.select_1.set_high()?;self.select_0.set_high()?; },
+            0=>{self.select_1.set_low()?; self.select_0.set_low()?; },
+            1=>{self.select_1.set_low()?; self.select_0.set_high()?; },
+            2=>{self.select_1.set_high()?; self.select_0.set_low()?; },
+            3=>{self.select_1.set_high()?; self.select_0.set_high()?; },
             _=>unreachable!()
         }
-        // might need a delay here for the demultiplexer
+        // need a delay here for the demultiplexer ~200 nanoseconds
+        hal::delay::Ets::delay_us(2);
         match group{
             0=>Ok(self.group_0.is_low()),
             1=>Ok(self.group_1.is_low()),
             2=>Ok(self.group_2.is_low()),
-            3=>Ok(self.group_2.is_low()),
+            3=>Ok(self.group_3.is_low()),
             _=>unreachable!()
         }
     }
@@ -110,8 +112,8 @@ impl <'a> Gamepad<'a>
         gamepad:Arc<Mutex<BLECharacteristic>>, 
         adc: ADC1, 
         select_pins: (Gpio15, Gpio2), 
-        input_groups: (Gpio16, Gpio17, Gpio5, Gpio18),
-        adc_pins: (Gpio32, Gpio33, Gpio34, Gpio35)
+        input_groups: (Gpio17, Gpio16, Gpio4, Gpio12),
+        adc_pins: (Gpio39, Gpio36, Gpio35, Gpio34)
     )->Result<Self>
     {
         let mut buttons = GamepadButtons { 
@@ -207,8 +209,8 @@ fn main() ->Result<()>{
     let peripherals = Peripherals::take().unwrap();
 
     let dev = BLEDevice::take();
-    dev.security().set_io_cap(enums::SecurityIOCap::NoInputNoOutput)
-        .set_auth(true, true, true);
+    dev.set_power(enums::PowerType::Default, enums::PowerLevel::P9).expect("Power not set");
+    dev.security().set_io_cap(enums::SecurityIOCap::NoInputNoOutput).set_auth(false, false, true);
 
     let server = dev.get_server();
     let mut hid_device = BLEHIDDevice::new(server);
@@ -237,26 +239,44 @@ fn main() ->Result<()>{
             peripherals.pins.gpio2,
         ),
         (
-            peripherals.pins.gpio16,
             peripherals.pins.gpio17,
-            peripherals.pins.gpio5,
-            peripherals.pins.gpio18
+            peripherals.pins.gpio16,
+            peripherals.pins.gpio4,
+            peripherals.pins.gpio12
         ),
         (
-            peripherals.pins.gpio32,
-            peripherals.pins.gpio33,
-            peripherals.pins.gpio34,
-            peripherals.pins.gpio35
+            peripherals.pins.gpio39,
+            peripherals.pins.gpio36,
+            peripherals.pins.gpio35,
+            peripherals.pins.gpio34
         )
     )?; 
-
+/* 
+    // Custom driver seems to work fine
+    let mut clk = PinDriver::output(peripherals.pins.gpio14)?;
+    let mut dio = PinDriver::input_output(peripherals.pins.gpio13)?;
+    let mut binding = hal::delay::Ets;
+    let mut tm = TM1637::new(
+        &mut clk, 
+        &mut dio,
+        &mut binding);
+    tm.init().expect("TM1637 IC failed to initialise");
+    tm.set_brightness(7).expect("Setting Brightness failed");
+ 
+    let mut counter:u16 = 0;
+    */
     loop{
         if server.connected_count()>0{
             gamepad.read()?;
-            hal::delay::FreeRtos::delay_ms(1);
+            //tm.clear().unwrap();
+            //hal::delay::FreeRtos::delay_ms(10);
         }
         else{
             hal::delay::FreeRtos::delay_ms(200);
+        
+            //tm.print_hex(0, &[(((counter/100)/10) as u8 & 0x0f), (((counter/100)%10) as u8 & 0x0f), ((counter/10)as u8) & 0x0f, ((counter%10)as u8)&0x0f ]).expect("printing wait time failed");
+            //counter +=1;
+
         }
     }
 }

@@ -1,0 +1,12 @@
+[default]
+name=Default
+runtime=host
+toolchain=default
+config-opts=
+run-opts=
+prefix=/home/samb/.var/app/org.gnome.Builder/cache/gnome-builder/install/esp32-ble-gamepad/host
+app-id=
+postbuild=
+prebuild=
+run-command=
+default=true
